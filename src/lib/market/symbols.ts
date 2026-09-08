@@ -62,7 +62,7 @@ export const SCAN_ENTRY_LO = 1.15;
 export const SCAN_ENTRY_HI = 1.75;
 export const SCAN_NEAR_LO = 0.7;
 export const SCAN_DEEP_HI = 2.2;
-export const SCAN_BARS = 400;
+export const SCAN_BARS = 320;
 export const PRED_SIGMA = 0.5;
 
 export function intervalMs(interval: Interval): number {

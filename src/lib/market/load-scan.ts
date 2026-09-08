@@ -3,7 +3,9 @@ import { SCAN_BARS, SYMBOLS } from "./symbols.ts";
 import type { Interval } from "./types.ts";
 import type { ScanReport, ScanRow } from "./scan.ts";
 
-const TTL_MS = 20_000;
+const FRESH_MS = 8_000;
+const STALE_MS = 45_000;
+const POOL = 8;
 let cache: { at: number; value: ScanReport } | null = null;
 let inflight: Promise<ScanReport> | null = null;
 
@@ -21,11 +23,47 @@ async function mapPool<T, R>(items: T[], n: number, fn: (item: T) => Promise<R>)
   return out;
 }
 
+function blankError(id: string, label: string, msg: string): ScanRow {
+  return {
+    symbol: id,
+    label,
+    source: "",
+    lastT: 0,
+    last: NaN,
+    sma: null,
+    atr: null,
+    ema: null,
+    below: false,
+    depth: 0,
+    emaUp: false,
+    predBars: NaN,
+    sigma: NaN,
+    slack: NaN,
+    tpBars: NaN,
+    volRatio: NaN,
+    squeeze: false,
+    climax: false,
+    bbBelowLower: false,
+    gates: {
+      below: false,
+      emaUp: false,
+      depthOk: false,
+      predOk: false,
+      notSqueeze: true,
+      notClimax: true,
+    },
+    status: "error",
+    reasons: [msg],
+    score: 0,
+    error: msg,
+  };
+}
+
 export async function runScan(): Promise<ScanReport> {
   const interval: Interval = "5m";
   const { fetchRecentKlines } = await import("./fetch-klines.server.ts");
   const { assembleScan, evaluateScan } = await import("./scan.ts");
-  const rows = await mapPool([...SYMBOLS], 3, async (s) => {
+  const rows = await mapPool([...SYMBOLS], POOL, async (s) => {
     try {
       const { candles, source } = await fetchRecentKlines({
         symbol: s.id,
@@ -41,47 +79,13 @@ export async function runScan(): Promise<ScanReport> {
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "lỗi tải";
-      const row: ScanRow = {
-        symbol: s.id,
-        label: s.label,
-        source: "",
-        lastT: 0,
-        last: NaN,
-        sma: null,
-        atr: null,
-        ema: null,
-        below: false,
-        depth: 0,
-        emaUp: false,
-        predBars: NaN,
-        sigma: NaN,
-        slack: NaN,
-        tpBars: NaN,
-        volRatio: NaN,
-        squeeze: false,
-        climax: false,
-        bbBelowLower: false,
-        gates: {
-          below: false,
-          emaUp: false,
-          depthOk: false,
-          predOk: false,
-          notSqueeze: true,
-          notClimax: true,
-        },
-        status: "error",
-        reasons: [msg],
-        score: 0,
-        error: msg,
-      };
-      return row;
+      return blankError(s.id, s.label, msg);
     }
   });
   return assembleScan(rows, interval);
 }
 
-export const loadScan = createServerFn({ method: "POST" }).handler(async (): Promise<ScanReport> => {
-  if (cache && Date.now() - cache.at < TTL_MS) return cache.value;
+function refresh(): Promise<ScanReport> {
   if (inflight) return inflight;
   inflight = runScan()
     .then((value) => {
@@ -92,4 +96,19 @@ export const loadScan = createServerFn({ method: "POST" }).handler(async (): Pro
       inflight = null;
     });
   return inflight;
+}
+
+/** Fresh cache hits immediately. Stale (<45s) returns now and refreshes in the background. */
+export async function getScan(): Promise<ScanReport> {
+  const now = Date.now();
+  if (cache && now - cache.at < FRESH_MS) return cache.value;
+  if (cache && now - cache.at < STALE_MS) {
+    void refresh();
+    return cache.value;
+  }
+  return refresh();
+}
+
+export const loadScan = createServerFn({ method: "POST" }).handler(async (): Promise<ScanReport> => {
+  return getScan();
 });

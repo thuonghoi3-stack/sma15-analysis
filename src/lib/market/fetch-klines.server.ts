@@ -6,10 +6,17 @@ const UA =
 
 type Page = { start: number; end: number };
 
-async function getJson(url: string, timeoutMs = 12_000): Promise<unknown> {
+async function getJson(
+  url: string,
+  timeoutMs = 12_000,
+  external?: AbortSignal,
+): Promise<unknown> {
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), timeoutMs);
+  const onAbort = () => ac.abort();
+  external?.addEventListener("abort", onAbort);
   try {
+    if (external?.aborted) throw new Error("aborted");
     const res = await fetch(url, {
       headers: { accept: "application/json", "user-agent": UA },
       signal: ac.signal,
@@ -20,6 +27,7 @@ async function getJson(url: string, timeoutMs = 12_000): Promise<unknown> {
     return (await res.json()) as unknown;
   } finally {
     clearTimeout(timer);
+    external?.removeEventListener("abort", onAbort);
   }
 }
 
@@ -260,48 +268,65 @@ export async function fetchRecentKlines(input: {
   const interval = input.interval;
   const limit = Math.min(1000, Math.max(80, input.limit ?? 500));
   const instId = okxInst(symbol);
-  const sources: { name: string; run: () => Promise<Candle[]> }[] = [
-    {
-      name: "Binance",
-      run: async () =>
-        parseBinanceLike(
-          await getJson(
-            `https://data-api.binance.vision/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`,
-          ),
-        ),
-    },
-    {
-      name: "MEXC",
-      run: async () =>
-        parseBinanceLike(
-          await getJson(
-            `https://api.mexc.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${Math.min(limit, 500)}`,
-          ),
-        ),
-    },
-    {
-      name: "OKX",
-      run: async () => {
-        const raw = await getJson(
-          `https://www.okx.com/api/v5/market/candles?instId=${instId}&bar=${okxBar(interval)}&limit=${Math.min(limit, 300)}`,
-        );
-        return parseOkx(raw);
-      },
-    },
-  ];
-  let lastErr: unknown;
-  for (const src of sources) {
-    try {
-      const candles = await src.run();
-      if (candles.length < 80) {
-        lastErr = new Error(`${src.name}: quá ít nến (${candles.length})`);
-        continue;
-      }
-      return { candles, source: src.name };
-    } catch (err) {
-      lastErr = err;
+  const timeoutMs = 2_800;
+  const ac = new AbortController();
+
+  const tryBinance = (host: string, name: string) =>
+    getJson(
+      `https://${host}/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`,
+      timeoutMs,
+      ac.signal,
+    ).then((raw) => {
+      const candles = parseBinanceLike(raw);
+      if (candles.length < 80) throw new Error(`${name}: quá ít nến`);
+      return { candles, source: name };
+    });
+  const tryMexc = () =>
+    getJson(
+      `https://api.mexc.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${Math.min(limit, 500)}`,
+      timeoutMs,
+      ac.signal,
+    ).then((raw) => {
+      const candles = parseBinanceLike(raw);
+      if (candles.length < 80) throw new Error("MEXC: quá ít nến");
+      return { candles, source: "MEXC" };
+    });
+  const tryOkx = () =>
+    getJson(
+      `https://www.okx.com/api/v5/market/candles?instId=${instId}&bar=${okxBar(interval)}&limit=${Math.min(limit, 300)}`,
+      timeoutMs,
+    ).then((raw) => {
+      const candles = parseOkx(raw);
+      if (candles.length < 80) throw new Error("OKX: quá ít nến");
+      return { candles, source: "OKX" };
+    });
+
+  const first = await new Promise<{ candles: Candle[]; source: string }>((resolve, reject) => {
+    const racers = [
+      () => tryBinance("data-api.binance.vision", "Binance"),
+      () => tryBinance("api.binance.com", "Binance"),
+      () => tryMexc(),
+    ];
+    let pending = racers.length;
+    let lastErr: unknown = new Error("không tải được nến");
+    let settled = false;
+    for (const run of racers) {
+      run()
+        .then((hit) => {
+          if (settled) return;
+          settled = true;
+          ac.abort();
+          resolve(hit);
+        })
+        .catch((err) => {
+          lastErr = err;
+          pending -= 1;
+          if (!settled && pending === 0) reject(lastErr);
+        });
     }
-  }
-  const msg = lastErr instanceof Error ? lastErr.message : "không tải được nến";
-  throw new Error(`Không tải được dữ liệu nến: ${msg}`);
+  }).catch(async () => {
+    ac.abort();
+    return tryOkx();
+  });
+  return first;
 }
