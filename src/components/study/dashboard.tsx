@@ -1,3 +1,5 @@
+"use client";
+
 import { Component, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Activity, LoaderCircle, RefreshCw, TriangleAlert } from "lucide-react";
 import { loadStudy } from "@/lib/market/load-study";
@@ -75,7 +77,9 @@ export function Dashboard() {
     <div className="min-h-dvh bg-bg text-fg">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:gap-8 sm:px-6 sm:py-8">
         <Header />
-        <ScannerPanel activeSymbol={symbol} onPick={setSymbol} />
+        <PanelGuard>
+          <ScannerPanel activeSymbol={symbol} onPick={setSymbol} />
+        </PanelGuard>
         <Controls
           symbol={symbol}
           interval={interval}

@@ -1,12 +1,11 @@
-import { liveBb } from "./bb-width.ts";
 import { computeAtr, computeBb, computeEma, computeSma, rankInWindow } from "./indicators.ts";
-import { predictOls } from "./predict.ts";
-import { LOCKED_90 } from "./residuals.ts";
+import { predLocked } from "./ols-locked.ts";
 import {
   ATR_PERIOD,
   BB_K,
   BB_PERIOD,
   BB_RANK_BARS,
+  BB_SQUEEZE_P,
   CLIMAX_VOL_MULT,
   FORECAST_MIN_BARS,
   PRED_SIGMA,
@@ -173,25 +172,21 @@ export function evaluateScan(input: {
   const lastAtr = atr[atr.length - 1] ?? null;
   const lastEma = ema[ema.length - 1] ?? null;
   const lastVol = volSma[volSma.length - 1] ?? null;
-  const liveBbState = liveBb({
-    widthPct: bb.widthPct,
-    rank,
-    pctB: bb.pctB,
-    lower: bb.lower,
-    lastLow: last.l,
-  });
+  const lastRank = rank[rank.length - 1] ?? null;
+  const lastLower = bb.lower[bb.lower.length - 1] ?? null;
+  const squeeze = lastRank != null && lastRank <= BB_SQUEEZE_P;
+  const bbBelowLower = lastLower != null && last.l < lastLower;
   const below = lastSma != null && last.l < lastSma;
   const depth =
     lastSma != null && lastAtr != null && lastAtr > 0 ? Math.max(0, (lastSma - last.l) / lastAtr) : 0;
   const emaUp = lastEma != null && last.c > lastEma;
-  const predBars = predictOls(LOCKED_90, depth, emaUp);
+  const predBars = predLocked(depth, emaUp);
   const sigma = Number.isFinite(predBars) ? PRED_SIGMA * predBars : NaN;
   const slack = Number.isFinite(sigma) ? Math.max(1, Math.round(sigma)) : NaN;
   const tpBars =
     Number.isFinite(predBars) ? Math.max(1, Math.round(predBars) - FORECAST_MIN_BARS) : NaN;
   const vr = volRatio(last.v, lastVol);
   const climax = isVolumeDump(last, lastVol, CLIMAX_VOL_MULT);
-  const squeeze = liveBbState.bbSqueeze;
   const hit = classifyLive({
     below,
     depth,
@@ -199,7 +194,7 @@ export function evaluateScan(input: {
     predBars,
     squeeze,
     climax,
-    bbBelowLower: liveBbState.bbBelowLower,
+    bbBelowLower,
   });
   const depthOk = depth >= SCAN_ENTRY_LO && depth <= SCAN_ENTRY_HI;
   const predOk = Number.isFinite(predBars) && predBars > FORECAST_MIN_BARS;
@@ -222,7 +217,7 @@ export function evaluateScan(input: {
     volRatio: vr,
     squeeze,
     climax,
-    bbBelowLower: liveBbState.bbBelowLower,
+    bbBelowLower,
     gates: {
       below,
       emaUp,

@@ -159,7 +159,7 @@ klines ──► detectDips ──► recovery / OLS rows
                 └── study UI (một cặp, 7–90 ngày)
 ```
 
-Scanner **không** chạy full 30d study: chỉ 400 nến gần nhất để ra SMA/ATR/EMA/BB.
+Scanner **không** chạy full 30d study: chỉ 400 nến gần nhất để ra SMA/ATR/EMA/BB. Endpoint `GET /api/scan` (cache 15s) — UI gọi mỗi 20 giây.
 
 ---
 

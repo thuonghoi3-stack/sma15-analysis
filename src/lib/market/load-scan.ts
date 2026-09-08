@@ -21,7 +21,7 @@ async function mapPool<T, R>(items: T[], n: number, fn: (item: T) => Promise<R>)
   return out;
 }
 
-async function runScan(): Promise<ScanReport> {
+export async function runScan(): Promise<ScanReport> {
   const interval: Interval = "5m";
   const { fetchRecentKlines } = await import("./fetch-klines.server.ts");
   const { assembleScan, evaluateScan } = await import("./scan.ts");

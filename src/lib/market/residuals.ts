@@ -1,3 +1,4 @@
+import { LOCKED_90 as LOCKED_RAW } from "./ols-locked.ts";
 import { mean, pearson, stdev } from "./stats.ts";
 import {
   fitOlsMax,
@@ -10,7 +11,7 @@ import {
 import { RECOVERY_DEPTHS, depthIndex } from "./recovery.ts";
 
 /** Locked 90d pooled from the stability run. */
-export const LOCKED_90: Coefs = { intercept: -0.28, depth: 4.67, ema: -0.36, vol: 0 };
+export const LOCKED_90: Coefs = LOCKED_RAW;
 
 export type AcfPoint = { lag: number; rho: number };
 

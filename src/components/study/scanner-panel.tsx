@@ -1,6 +1,7 @@
+"use client";
+
 import { useEffect, useRef, useState } from "react";
 import { Bell, BellOff, LoaderCircle, Radio } from "lucide-react";
-import { loadScan } from "@/lib/market/load-scan";
 import type { ScanReport, ScanRow, ScanStatus } from "@/lib/market/scan";
 import { formatAtrMul, formatNum, formatPrice, formatTimeVn } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -46,7 +47,14 @@ export function ScannerPanel({
     let cancelled = false;
 
     const pull = () => {
-      loadScan()
+      fetch("/api/scan", { cache: "no-store" })
+        .then(async (res) => {
+          if (!res.ok) {
+            const body = (await res.json().catch(() => null)) as { error?: string } | null;
+            throw new Error(body?.error || `Quét lỗi ${res.status}`);
+          }
+          return res.json() as Promise<ScanReport>;
+        })
         .then((res) => {
           if (cancelled) return;
           setReport(res);
