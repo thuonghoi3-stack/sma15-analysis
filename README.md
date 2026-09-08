@@ -39,8 +39,8 @@ UI (20s) ──GET /api/scan──► runScan
 | Tầng | File | Việc |
 |---|---|---|
 | UI | `scanner-panel.tsx` | Client-only. `fetch("/api/scan")` mỗi 20s. Thẻ Vào lệnh, Gần ngưỡng, bảng cửa, chuông trình duyệt. Bấm cặp → tải study. |
-| HTTP | `src/routes/api/scan.ts` | `GET /api/scan`. JSON + `s-maxage=15`. |
-| Orchestrator | `load-scan.ts` | Cache in-memory 20s, gộp request trùng (`inflight`). |
+| HTTP | `src/routes/api/scan.ts` | `GET /api/scan`. JSON, `max-age=8`, stale-while-revalidate 20s. |
+| Orchestrator | `load-scan.ts` | Cache tươi 8s; stale tới 45s trả ngay rồi refresh nền. 14 cặp, concurrency 8. Nến: race Binance vision / Binance API / MEXC (timeout 2.8s), OKX dự phòng. |
 | Chấm nến | `scan.ts` | Chỉ import indicator + `ols-locked` — **không** kéo `analyze` / `predict`. |
 | Công thức | `ols-locked.ts` | Ba hệ số khóa. |
 
@@ -189,7 +189,7 @@ src/routes/index.tsx     trang chính
 | File | Việc |
 |---|---|
 | **`scan.ts`** | `evaluateScan` + `classifyLive`. Trạng thái `entry` / `near` / `blocked` / `flat` / `error`. |
-| **`load-scan.ts`** | `runScan`: 14 cặp × 400 nến 5m, cache 20s, concurrency 3. |
+| **`load-scan.ts`** | `runScan` / `getScan`: 14 cặp × 320 nến 5m, pool 8, SWR 8s/45s. |
 | **`src/routes/api/scan.ts`** | `GET /api/scan` cho UI và curl. |
 
 ### Runner CLI (không UI)
