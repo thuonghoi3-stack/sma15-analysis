@@ -16,6 +16,7 @@ import { TrendComparePanel } from "@/components/study/trend-compare-panel";
 import { OscPanel } from "@/components/study/osc-panel";
 import { RecoveryPanel } from "@/components/study/recovery-panel";
 import { EmaTunePanel } from "@/components/study/ema-tune-panel";
+import { OlsTunePanel } from "@/components/study/ols-tune-panel";
 import { MaTypePanel } from "@/components/study/ma-type-panel";
 import { ScannerPanel } from "@/components/study/scanner-panel";
 import { cn } from "@/lib/cn";
@@ -258,6 +259,8 @@ function Results({
       <RecoveryPanel report={study.recovery} />
 
       <EmaTunePanel report={study.emaTune} />
+
+      {study.olsTune ? <OlsTunePanel report={study.olsTune} /> : null}
 
       <MaTypePanel report={study.maType} />
 

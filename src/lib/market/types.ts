@@ -1,3 +1,5 @@
+import type { OlsTuneReport } from "./ols-tune.ts";
+
 export type Interval = "1m" | "5m" | "15m" | "1h";
 
 export type TrendFilter = "all" | "up" | "down";
@@ -163,6 +165,7 @@ export type StudyResult = {
   recovery: RecoveryReport;
   emaTune: EmaTuneReport;
   maType: MaTypeReport;
+  olsTune: OlsTuneReport;
   bb: BbWidthReport;
 };
 

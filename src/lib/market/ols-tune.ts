@@ -8,7 +8,7 @@ import {
   type Score,
 } from "./predict.ts";
 import { LOCKED_90 } from "./residuals.ts";
-import { FORECAST_MIN_BARS, SCAN_ENTRY_HI, SCAN_ENTRY_LO } from "./symbols.ts";
+import { SCAN_ENTRY_HI, SCAN_ENTRY_LO } from "./symbols.ts";
 
 export type OlsKind = "linear" | "log" | "sqrt" | "quad";
 
@@ -258,7 +258,8 @@ function gridSearch(train: PredictRow[], test: PredictRow[]): OlsSpecScore {
   });
 }
 
-function pickWinner(specs: OlsSpecScore[], lockedMae: number): { winner: string; grade: "keep" | "replace" } {
+function pickWinner(specs: OlsSpecScore[], lockedMae: number): { winner: string; grade: "keep" | "replace"; alt: string } {
+  const locked = specs.find((s) => s.name === "locked");
   const ok = specs.filter((s) => Number.isFinite(s.entry.mae) && s.nEntry >= 30);
   const pool = ok.length ? ok : specs.filter((s) => Number.isFinite(s.test.mae));
   let best = pool[0]!;
@@ -268,8 +269,11 @@ function pickWinner(specs: OlsSpecScore[], lockedMae: number): { winner: string;
     if (a + 1e-9 < b) best = s;
     else if (Math.abs(a - b) < 0.02 && s.test.mae < best.test.mae) best = s;
   }
-  const grade = best.name !== "locked" && lockedMae - best.entry.mae >= 0.08 ? "replace" : "keep";
-  return { winner: best.name, grade };
+  const se = 2.4 / Math.sqrt(Math.max(best.nEntry, 1));
+  const delta = lockedMae - best.entry.mae;
+  const testOk = locked == null || best.test.mae <= locked.test.mae + 0.03;
+  const replace = best.name !== "locked" && delta >= Math.max(0.2, se) && testOk;
+  return { winner: replace ? best.name : "locked", grade: replace ? "replace" : "keep", alt: best.name };
 }
 
 export function assembleOlsTune(rows: PredictRow[], locked: Coefs = LOCKED_90): OlsTuneReport {
@@ -375,13 +379,15 @@ export function assembleOlsTune(rows: PredictRow[], locked: Coefs = LOCKED_90): 
     gridSearch(train, test),
   ];
   const lockedMae = specs.find((s) => s.name === "locked")?.entry.mae ?? NaN;
-  const { winner, grade } = pickWinner(specs, lockedMae);
+  const { winner, grade, alt } = pickWinner(specs, lockedMae);
   const win = specs.find((s) => s.name === winner)!;
-  const delta = lockedMae - win.entry.mae;
+  const rival = specs.find((s) => s.name === alt) ?? win;
+  const delta = lockedMae - rival.entry.mae;
+  const se = 2.4 / Math.sqrt(Math.max(rival.nEntry, 1));
   const verdict =
     grade === "replace"
       ? `Thay locked: ${win.label} MAE cửa ${win.entry.mae.toFixed(2)} vs locked ${lockedMae.toFixed(2)} (Δ ${delta.toFixed(2)}).`
-      : `Giữ locked (−0.28 + 4.67×ATR − 0.36×EMA). Best khác (${win.label}) chỉ hơn ${delta.toFixed(2)} nến — dưới ngưỡng 0.08.`;
+      : `Giữ locked (−0.28 + 4.67×ATR − 0.36×EMA). ${rival.label} hơn ${delta.toFixed(2)} nến trên cửa (SE ≈ ${se.toFixed(2)}, n=${rival.nEntry}) — trong nhiễu. LAD gần locked. Volume không đạt ngưỡng.`;
   return {
     n: rows.length,
     nTrain: train.length,

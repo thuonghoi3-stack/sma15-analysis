@@ -20,7 +20,7 @@ function parseRequest(raw: unknown): StudyRequest {
 export const loadStudy = createServerFn({ method: "POST" })
   .validator((d: unknown) => parseRequest(d))
   .handler(async ({ data }): Promise<StudyResult> => {
-    const key = `v16:${data.symbol}:${data.interval}:${data.days}`;
+    const key = `v17:${data.symbol}:${data.interval}:${data.days}`;
     const hit = cache.get(key);
     if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
 

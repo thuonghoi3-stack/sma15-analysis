@@ -28,6 +28,8 @@ import { runDepthSweep } from "./depth-sweep.ts";
 import { runEmaTune } from "./ema-tune.ts";
 import { runBbWidth, liveBb } from "./bb-width.ts";
 import { runMaType } from "./ma-type.ts";
+import { extractRows } from "./predict.ts";
+import { assembleOlsTune } from "./ols-tune.ts";
 import type {
   Candle,
   ChartCandle,
@@ -545,6 +547,7 @@ export function runStudy(input: {
     lookforward,
     intervalMin: minutes,
   });
+  const olsTune = assembleOlsTune(extractRows(candles, interval));
 
   return {
     symbol,
@@ -614,6 +617,7 @@ export function runStudy(input: {
     recovery,
     emaTune,
     maType,
+    olsTune,
     bb: bbWidth,
   };
 }
